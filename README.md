@@ -30,4 +30,12 @@ For other training parameters, you may refer to `other/utils.py`.
 
 ## Evaluation
 
-*In progress...*
+After training the model, run the following for evaluation:
+
+```
+python run.py --mode test --saved_model $MODEL/$CHECKPOINT  --data_dir $DS_BASE_DIR --task $TASK --device_id 1
+```
+
+where `$MODEL` is the trained model root directory, `$CHECKPOINT` is the checkpoint that you want to use for prediction. Note that as we only save the best model during the training time, you will basically have only one BEST checkpoint in the model's directory.
+
+Alternative: Run the prediction by `sh test.sh`
