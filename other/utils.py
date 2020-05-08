@@ -27,7 +27,14 @@ def cmdline_args():
     p.add_argument("--batch_size", type=int, default=5, help="Batch size")
     p.add_argument("--device_id", type=int, default=0, help="GPU device id")
     p.add_argument("--report_every", type=int, default=50, help="Report interval (steps)")
-    p.add_argument("--task", type=str, default='a', help="Sub-task")
+    p.add_argument("--task", type=str, default='a', choices=['a', 'b', 'c', 'all'], help="Sub-task")
+
+    args = p.parse_args()
+    if args.task == 'all':
+        p.add_argument('--mlt', default=True, action='store_true')
+    else:
+        p.add_argument('--mlt', default=False, action='store_true')
+
     return p.parse_args()
 
 

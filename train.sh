@@ -2,7 +2,8 @@
 
 MODEL=/disk1/sajad/trained-offns-bert/offns-c/
 DS_BASE_DIR=dataset/
-TASK=c
+TASK=all
+#TASK=a
 
 rm -r $MODEL
 mkdir -p $MODEL

@@ -6,7 +6,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from data.data_loader import MyDataLoader
-from models.classifier import Classifier
+from models.classifier import Classifier, MTLClassifier
 from models.trainer import build_trainer
 from other.reporter import Statistics
 from other.utils import cmdline_args, evaluate_model_normal
@@ -30,28 +30,57 @@ def train(args):
     random.seed(args.seed)
     torch.backends.cudnn.deterministic = True
 
-    dl = MyDataLoader(args)
+    if not args.mlt:
 
-    # Loading train and dev set
-    dl.load_train_set(task=args.task)
-    dl.load_dev_set(task=args.task)
+        dl = MyDataLoader(args)
 
-    # Extracting sentences to prepare for BERT module
-    training_sents, training_labels = dl.sent_label_extractor()
-    test_sentences, test_labels, test_tweetids = dl.sent_label_extractor(is_eval=True)
+        # Loading train and dev set
+        dl.load_train_set(task=args.task)
+        dl.load_dev_set(task=args.task)
 
-    # Processing text through BERT ...
-    training_inputs, trainig_masks, training_labels = dl.prepare_bert_data(training_sents, training_labels)
-    test_inputs, test_masks, test_labels = dl.prepare_bert_data(test_sentences, test_labels)
+        # Extracting sentences to prepare for BERT module
+        training_sents, training_labels = dl.sent_label_extractor()
+        dev_sentences, dev_labels, test_tweetids = dl.sent_label_extractor(is_eval=True)
 
-    # Preparing data as input to neural network
-    train_dataloader = dl.get_dataloader(training_inputs, trainig_masks, training_labels)
-    dev_dataloader = dl.get_dataloader(test_inputs, test_masks, test_labels)
+        # Processing text through BERT ...
+        training_inputs, trainig_masks, training_labels = dl.prepare_bert_data(training_sents, training_labels)
+        test_inputs, test_masks, dev_labels = dl.prepare_bert_data(dev_sentences, dev_labels)
+
+        # Preparing data as input to neural network
+        train_dataloader = dl.get_dataloader(training_inputs, trainig_masks, [training_labels])
+        dev_dataloaders = [dl.get_dataloader(test_inputs, test_masks, [dev_labels])]
+    else:
+        logger.info("Trying to solve all tasks at once... loading dataloaders for each task.")
+
+        dl = MyDataLoader(args)
+        dl.load_train_set(task=args.task)
+        dl.load_dev_set(task=args.task)
+
+        logger.info("Extracting sentences with the associated labels...")
+        training_sents, training_labels = dl.sent_label_extractor()  # training labels is a list of all tasks' labels
+        dev_sentences, dev_labels, test_tweetids = dl.sent_label_extractor(is_eval=True)  # returning lists...
+
+        logger.info("Running bert tokenizer on the sentences...")
+
+        features_list_train = dl.prepare_bert_data(training_sents, training_labels)  # features list for each task (3)
+        features_list_dev = dl.prepare_bert_data(dev_sentences, dev_labels, is_eval=True)
+
+        # loading one dataloader for train
+        logger.info("Building Train dataloader...")
+
+        train_dataloader = dl.get_dataloader(features_list_train[0][0], features_list_train[0][1],
+                                             [ft[2] for ft in features_list_train])
+
+        # loading dataloaders for each dev (each task) separately.
+        logger.info("Building Dev dataloader...")
+        dev_dataloaders = []
+        for ft in features_list_dev:
+            dev_dataloaders += [dl.get_dataloader(ft[0], ft[1], [ft[2]])]
 
     logger.info("Loading model ...")
 
     # Constructing classification model
-    model = Classifier(args)
+    model = MTLClassifier(args) if args.mlt else Classifier(args)
 
     model.cuda()
     logger.info(model)
@@ -67,7 +96,7 @@ def train(args):
     writer = SummaryWriter(args.model_path + '/stats')
 
     train_stats = Statistics()
-    f1_history = list()
+    f1_history = {}
     logger.info("Start training...")
     for epoch in range(1, args.epochs + 1):
         total_train_loss = 0
@@ -94,25 +123,28 @@ def train(args):
         y_hat = list()
         y = list()
         total_dev_loss = 0
-        for step, batch_val in enumerate(dev_dataloader):
-            true_labels_ids, predicted_labels_ids, loss = trainer.validate(batch_val)
-            total_dev_loss += loss
-            y.extend(true_labels_ids)
-            y_hat.extend(predicted_labels_ids)
-        avg_dev_loss = total_dev_loss / len(dev_dataloader)
-        print(("\n-Total dev loss: %4.2f on epoch %d/%d\n") % (avg_dev_loss, epoch, args.epochs))
+        for i, dev_dataloader in enumerate(dev_dataloaders):
+            for step, batch_val in enumerate(dev_dataloader):
+                true_labels_ids, predicted_labels_ids, loss = trainer.validate(batch_val)
+                total_dev_loss += loss
+                y.extend(true_labels_ids)
+                y_hat.extend(predicted_labels_ids)
+            avg_dev_loss = total_dev_loss / len(dev_dataloader)
+            print(("\n-Total dev loss: %4.2f on epoch %d/%d\n") % (avg_dev_loss, epoch, args.epochs))
 
-        f1_score, pr, rec = evaluate_model_normal(y, y_hat)
-        print(('-Overall: F1: %4.3f (Precision: %4.3f, Recall: %4.3f)\n') % (f1_score, pr, rec))
+            f1_score, pr, rec = evaluate_model_normal(y, y_hat)
+            print(('-Overall: F1: %4.3f (Precision: %4.3f, Recall: %4.3f)\n') % (f1_score, pr, rec))
 
-        f1_history.append(f1_score)
-        if (trainer._maybe_save_model(f1_score, epoch=epoch)):
-            logger.info("[BEST model] saved! ")
+            task = 'a' if i == 0 else 'b' if i == 0 else 'c'
 
-        writer.add_scalar('Dev/loss', avg_dev_loss, epoch)
-        writer.add_scalars('Dev/scores', {'F1': f1_score, 'Precision': pr, 'Recall': rec}, epoch)
+            f1_history[task].append(f1_score)
+            if (trainer._maybe_save_model(f1_score), task):
+                logger.info("[BEST model] saved for task %s " % task)
 
-        print("\n-------------------------------")
+            writer.add_scalar('Dev/loss', avg_dev_loss, epoch)
+            writer.add_scalars('Dev/scores', {'F1': f1_score, 'Precision': pr, 'Recall': rec}, epoch)
+
+            print("\n-------------------------------")
 
     logger.info("Training terminated!")
 
