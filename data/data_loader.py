@@ -26,6 +26,28 @@ def label_switch(old_label):
             return 2
 
 
+def label_switch_b(old_label):
+    if True:
+        if old_label == 'TIN':
+            return 1
+        elif old_label == 'UNT':
+            return 0
+        if old_label == 'None':
+            return 2
+
+
+def label_switch_c(old_label):
+    if True:
+        if old_label == 'IND':
+            return 0
+        elif old_label == 'GRP':
+            return 1
+        elif old_label == 'OTH':
+            return 2
+        elif old_label == 'None':
+            return 3
+
+
 def attention_mask(ids):
     masks = list()
     for sent in ids:
@@ -42,17 +64,22 @@ class MyDataLoader(object):
         self.bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
         self.args = args
 
-    def load_train_set(self, task):
+    def load_train_set(self, task, mlt=False):
         set_path = pjoin(self.data_base_dir, 'olid-training-v1.0.tsv')
-        if task == 'a':
-            OLID = pd.read_csv(set_path, sep='\t', header=0)[['id', 'tweet', 'subtask_a']]
-        elif task == 'b':
-            OLID = pd.read_csv(set_path, sep='\t', header=0)[['id', 'tweet', 'subtask_b']]
-            OLID = OLID[~pd.isna(OLID["subtask_b"])]
-        elif task == 'c':
-            OLID = pd.read_csv(set_path, sep='\t', header=0)[['id', 'tweet', 'subtask_c']]
-            OLID = OLID[~pd.isna(OLID["subtask_c"])]
-        OLID.columns = ['id', 'text', 'label']
+        if not mlt:
+            if task == 'a':
+                OLID = pd.read_csv(set_path, sep='\t', header=0)[['id', 'tweet', 'subtask_a']]
+            elif task == 'b':
+                OLID = pd.read_csv(set_path, sep='\t', header=0)[['id', 'tweet', 'subtask_b']]
+                OLID = OLID[~pd.isna(OLID["subtask_b"])]
+            elif task == 'c':
+                OLID = pd.read_csv(set_path, sep='\t', header=0)[['id', 'tweet', 'subtask_c']]
+                OLID = OLID[~pd.isna(OLID["subtask_c"])]
+            OLID.columns = ['id', 'text', 'label']
+        else:
+            OLID = pd.read_csv(set_path, sep='\t', header=0)[
+                ['id', 'tweet', 'subtask_a', 'subtask_b', 'subtask_c']].fillna('None')
+
         OLID = OLID.assign(Platform='Twitter')
         tqdm.pandas(desc='Converting labels...')
         OLID['label'] = OLID['label'].progress_apply(label_switch)
@@ -60,35 +87,87 @@ class MyDataLoader(object):
         OLID.reset_index(drop=True, inplace=True)
         self.train_set = OLID
 
-    def load_dev_set(self, task='a', data='testset-levela.tsv', label='labels-levela.csv', random_seed=233):
+    def load_dev_set(self, task='a', data='testset-levela.tsv', label='labels-levela.csv', mlt=False, random_seed=233):
         data_file = pjoin(self.data_base_dir, data)
         label_file = pjoin(self.data_base_dir, label)
-        if task == 'b':
-            data_file = data_file.replace('levela', 'levelb')
-            if label:
-                label_file = label_file.replace('levela', 'levelb')
-        if task == 'c':
-            data_file = data_file.replace('levela', 'levelc')
-            if label:
-                label_file = label_file.replace('levela', 'levelc')
+        if not mlt:
+            if task == 'b':
+                data_file = data_file.replace('levela', 'levelb')
+                if label:
+                    label_file = label_file.replace('levela', 'levelb')
+            elif task == 'c':
+                data_file = data_file.replace('levela', 'levelc')
+                if label:
+                    label_file = label_file.replace('levela', 'levelc')
 
-        test_data = pd.read_csv(data_file, sep='\t', header=0)[['id', 'tweet']]
-        test_data.columns = ['id', 'text']
+            dev_data_a = pd.read_csv(data_file, sep='\t', header=0)[['id', 'tweet']]
+            dev_data_a.columns = ['id', 'text']
 
-        if label_file:
-            test_label = pd.read_csv(label_file, sep=',', header=None)
-            test_label.columns = ['id', 'label']
+            if label_file:
+                dev_label_a = pd.read_csv(label_file, sep=',', header=None)
+                dev_label_a.columns = ['id', 'label']
+                tqdm.pandas(desc="Converting labels...")
+                dev_label_a['label'] = dev_label_a['label'].progress_apply(label_switch)
+                OLID_dev = pd.concat([dev_label_a[['id']], dev_data_a[['text']], dev_label_a[['label']]],
+                                     axis=1)
+            else:
+                OLID_dev = pd.concat([dev_data_a[['id']], dev_data_a[['text']]], axis=1)
+
+            OLID_dev = OLID_dev.assign(Platform='Twitter')
+            OLID_dev = OLID_dev.sample(frac=1, random_state=random_seed)
+            OLID_dev.reset_index(drop=True, inplace=True)
+            self.dev_set = OLID_dev
+
+        elif mlt:
+            data_file_b = data_file.replace('levela', 'levelb')
+            label_file_b = label_file.replace('levela', 'levelb')
+            data_file_c = data_file.replace('levela', 'levelc')
+            label_file_c = label_file.replace('levela', 'levelc')
+
+            # loading data files
+            dev_data_a = pd.read_csv(data_file, sep='\t', header=0)[['id', 'tweet']]
+            dev_data_a.columns = ['id', 'text']
+
+            dev_data_b = pd.read_csv(data_file_b, sep='\t', header=0)[['id', 'tweet']]
+            dev_data_b.columns = ['id', 'text']
+
+            dev_data_c = pd.read_csv(data_file_c, sep='\t', header=0)[['id', 'tweet']]
+            dev_data_c.columns = ['id', 'text']
+
+            # loading labels
+            dev_label_a = pd.read_csv(label_file, sep=',', header=None)
+            dev_label_a.columns = ['id', 'label']
+
+            dev_label_b = pd.read_csv(label_file_b, sep=',', header=None)
+            dev_label_b.columns = ['id', 'label']
+
+            dev_label_c = pd.read_csv(label_file_c, sep=',', header=None)
+            dev_label_c.columns = ['id', 'label']
+
             tqdm.pandas(desc="Converting labels...")
-            test_label['label'] = test_label['label'].progress_apply(label_switch)
-            OLID_dev = pd.concat([test_label[['id']], test_data[['text']], test_label[['label']]],
-                                 axis=1)
-        else:
-            OLID_dev = pd.concat([test_data[['id']], test_data[['text']]], axis=1)
+            dev_label_a['label'] = dev_label_a['label'].progress_apply(label_switch)
+            dev_label_b['label'] = dev_label_b['label'].progress_apply(label_switch_b)
+            dev_label_c['label'] = dev_label_c['label'].progress_apply(label_switch_c)
 
-        OLID_dev = OLID_dev.assign(Platform='Twitter')
-        OLID_dev = OLID_dev.sample(frac=1, random_state=random_seed)
-        OLID_dev.reset_index(drop=True, inplace=True)
-        self.dev_set = OLID_dev
+            self.dev_set = list()
+            for t in ['a', 'b', 'c']:
+                if t == 'a':
+                    dev_label = dev_label_a
+                    dev_data = dev_data_a
+                elif t == 'b':
+                    dev_label = dev_label_b
+                    dev_data = dev_data_b
+                elif t == 'c':
+                    dev_label = dev_label_c
+                    dev_data = dev_data_c
+
+                df = pd.concat([dev_label[['id']], dev_data[['text']], dev_label_a[['label']]],
+                               axis=1)
+                df = df.assign(Platform='Twitter')
+
+                df = df.sample(frac=1, random_state=random_seed)
+                df.reset_index(drop=True, inplace=True)
+                self.dev_set.append(df)
 
     def load_test_set(self, task='a', data='testset_a_2020.tsv', label='englishA-goldlabels.csv', random_seed=233):
         data_file = pjoin(self.data_base_dir, data)
@@ -100,12 +179,13 @@ class MyDataLoader(object):
         if task == 'c':
             data_file = data_file.replace('A', 'C')
             if label:
-                label_file = label_file.replace('a', 'c')
+                label_file = label_file.replace('A', 'C')
 
         test_data = pd.read_csv(data_file, sep='\t', header=0)[['id', 'tweet']]
         test_data.columns = ['id', 'text']
 
         if label_file:
+
             test_label = pd.read_csv(label_file, sep=',', header=None)
             test_label.columns = ['id', 'label']
             tqdm.pandas(desc="Converting labels...")
@@ -118,7 +198,8 @@ class MyDataLoader(object):
         OLID_test = OLID_test.assign(Platform='Twitter')
         OLID_test = OLID_test.sample(frac=1, random_state=random_seed)
         OLID_test.reset_index(drop=True, inplace=True)
-        import pdb;pdb
+        import pdb;
+        pdb
         self.test_set = OLID_test
 
     def sent_label_extractor(self, is_eval=False, is_test=False):

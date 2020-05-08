@@ -75,9 +75,9 @@ def train(args):
         trainer.set_train()
         for step, batch in enumerate(train_dataloader):
             loss, train_stats = trainer.step(batch, train_stats)
-
-            if step % args.report_every == 0:
-                train_stats._report_stat((epoch - 1) * len(train_dataloader) + step,
+            curr_step = (epoch - 1) * len(train_dataloader) + step
+            if curr_step % args.report_every == 0:
+                train_stats._report_stat(curr_step,
                                          args.epochs * len(train_dataloader), epoch, args.epochs)
 
             total_train_loss += loss
@@ -100,11 +100,10 @@ def train(args):
             y.extend(true_labels_ids)
             y_hat.extend(predicted_labels_ids)
         avg_dev_loss = total_dev_loss / len(dev_dataloader)
-        logger.info(("Total dev loss: %4.2f on epoch %d/%d") % (avg_dev_loss, epoch, args.epochs))
+        print(("\n-Total dev loss: %4.2f on epoch %d/%d\n") % (avg_dev_loss, epoch, args.epochs))
 
-        import pdb;pdb.set_trace()
         f1_score, pr, rec = evaluate_model_normal(y, y_hat)
-        print(('\n -Overall: F1: %4.3f (Precision: %4.3f, Recall: %4.3f)') % (f1_score, pr, rec))
+        print(('-Overall: F1: %4.3f (Precision: %4.3f, Recall: %4.3f)\n') % (f1_score, pr, rec))
 
         f1_history.append(f1_score)
         if (trainer._maybe_save_model(f1_score, epoch=epoch)):

@@ -9,12 +9,11 @@ class Classifier(nn.Module):
 
         self.bert_model = BertModel.from_pretrained(
             args.init_checkpoint,
-            num_labels=2 if args.task != 'c' else 3,
             output_attentions=False,
             output_hidden_states=True,
         )
         self.is_eval_mode = is_eval
-        self.linear_1 = nn.Linear(768, 2 if args.task != 'c' else 3)
+        self.linear = nn.Linear(768, 2 if args.task != 'c' else 3)
 
     def switch_state(self):
         self.is_eval_mode = not self.is_eval_mode
@@ -24,8 +23,8 @@ class Classifier(nn.Module):
         bert_outputs = self.bert_model(input_ids,
                                        token_type_ids=None,
                                        attention_mask=attention_mask)
-        model_output = self.linear_1(bert_outputs[1])
-        # if self.is_eval_mode:
-        #     import pdb;pdb.set_trace()
+
+        # Should give the logits to the the linear layer
+        model_output = self.linear(bert_outputs[1])
 
         return model_output
