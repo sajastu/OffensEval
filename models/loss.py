@@ -4,7 +4,7 @@ import torch.nn as nn
 class CELoss(nn.Module):
     def __init__(self):
         super(CELoss, self).__init__()
-        self.loss = nn.CrossEntropyLoss(reduction='none')
+        self.loss = nn.CrossEntropyLoss()
 
     def forward(self, outputs, batch_labels):
         if len(outputs) > 1: # calculate mtl loss

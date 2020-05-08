@@ -289,9 +289,6 @@ class MyDataLoader(object):
         return inputs, masks, labels
 
     def get_dataloader(self, inputs, masks, labels_list):
-        try:
-            data = TensorDataset(inputs, masks, *labels_list)
-            sampler = RandomSampler(data)
-            return DataLoader(data, sampler=sampler, batch_size=self.args.batch_size)
-        except:
-            import pdb;pdb.set_trace()
+        data = TensorDataset(inputs, masks, *labels_list)
+        sampler = RandomSampler(data)
+        return DataLoader(data, sampler=sampler, batch_size=self.args.batch_size)

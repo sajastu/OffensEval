@@ -96,7 +96,7 @@ def train(args):
     writer = SummaryWriter(args.model_path + '/stats')
 
     train_stats = Statistics()
-    f1_history = {}
+    f1_history = {'A': [], 'B': [], 'C': []}
     logger.info("Start training...")
     for epoch in range(1, args.epochs + 1):
         total_train_loss = 0
@@ -114,39 +114,43 @@ def train(args):
         avg_train_loss = total_train_loss / len(train_dataloader)
 
         writer.add_scalar('Train/loss', avg_train_loss, epoch)
-        # torch.save(model.state_dict(), f'{args.model_path}/model-{epoch}-{args.task}.pt')
         logger.info(('Training loss for epoch %d/%d: %4.2f') % (epoch, args.epochs, avg_train_loss))
 
         print("\n-------------------------------")
         logger.info('Start validation ...')
-        trainer.set_eval()
-        y_hat = list()
-        y = list()
-        total_dev_loss = 0
-        for i, dev_dataloader in enumerate(dev_dataloaders):
-            for step, batch_val in enumerate(dev_dataloader):
-                true_labels_ids, predicted_labels_ids, loss = trainer.validate(batch_val)
-                total_dev_loss += loss
-                y.extend(true_labels_ids)
-                y_hat.extend(predicted_labels_ids)
-            avg_dev_loss = total_dev_loss / len(dev_dataloader)
-            print(("\n-Total dev loss: %4.2f on epoch %d/%d\n") % (avg_dev_loss, epoch, args.epochs))
-
-            f1_score, pr, rec = evaluate_model_normal(y, y_hat)
-            print(('-Overall: F1: %4.3f (Precision: %4.3f, Recall: %4.3f)\n') % (f1_score, pr, rec))
-
-            task = 'a' if i == 0 else 'b' if i == 0 else 'c'
-
-            f1_history[task].append(f1_score)
-            if (trainer._maybe_save_model(f1_score), task):
-                logger.info("[BEST model] saved for task %s " % task)
-
-            writer.add_scalar('Dev/loss', avg_dev_loss, epoch)
-            writer.add_scalars('Dev/scores', {'F1': f1_score, 'Precision': pr, 'Recall': rec}, epoch)
-
-            print("\n-------------------------------")
+        validate(args, dev_dataloaders, epoch, f1_history, trainer, writer)
 
     logger.info("Training terminated!")
+
+
+def validate(args, dev_dataloaders, epoch, f1_history, trainer, writer):
+    trainer.set_eval()
+    y_hat = list()
+    y = list()
+    for i, dev_dataloader in enumerate(dev_dataloaders):
+        total_dev_loss = 0
+        for step, batch_val in enumerate(dev_dataloader):
+            true_labels_ids, predicted_labels_ids, loss = trainer.validate(batch_val, i)
+            total_dev_loss += loss
+            y.extend(true_labels_ids)
+            y_hat.extend(predicted_labels_ids)
+        avg_dev_loss = total_dev_loss / len(dev_dataloader)
+        task = 'A' if i == 0 else 'B' if i == 1 else 'C'
+        print(f'-Task: {task}')
+        print(("\n-Total dev loss: %4.2f on epoch %d/%d\n") % (avg_dev_loss, epoch, args.epochs))
+
+        f1_score, pr, rec = evaluate_model_normal(y, y_hat)
+        print(('-Overall: F1: %4.3f (Precision: %4.3f, Recall: %4.3f)\n') % (f1_score, pr, rec))
+
+
+        f1_history[task].append(f1_score)
+        if (trainer._maybe_save_model(f1_score, task)):
+            logger.info("[BEST model] saved for task %s " % task)
+
+        writer.add_scalar('Dev/loss', avg_dev_loss, epoch)
+        writer.add_scalars('Dev/scores', {'F1': f1_score, 'Precision': pr, 'Recall': rec}, epoch)
+
+        print("\n-------------------------------")
 
 
 def test(args):
