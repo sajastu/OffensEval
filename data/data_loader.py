@@ -76,6 +76,7 @@ class MyDataLoader(object):
         self.mlt = args.mlt
 
     def load_train_set(self, task):
+        task = task.lower()
         set_path = pjoin(self.data_base_dir, 'olid-training-v1.0.tsv')
         if not self.mlt:
             if task == 'a':
@@ -187,27 +188,25 @@ class MyDataLoader(object):
                 df.reset_index(drop=True, inplace=True)
                 self.dev_set.append(df)
 
-    def load_test_set(self, task='a', data='testset_a_2020.tsv', label='englishA-goldlabels.csv', random_seed=233):
+    def load_test_set(self, task='a', data='test_a_tweets.tsv', label='englishA-goldlabels.csv', random_seed=233):
         data_file = pjoin(self.data_base_dir, data)
         label_file = pjoin(self.data_base_dir, label)
-        if task == 'b':
-            data_file = data_file.replace('A', 'B')
+        if task.lower() == 'b':
+            data_file = self.data_base_dir + '/' + data.replace('a', 'b')
             if label:
                 label_file = label_file.replace('A', 'B')
-        if task == 'c':
-            data_file = data_file.replace('A', 'C')
+        if task.lower() == 'c':
+            data_file = self.data_base_dir + '/' +data.replace('a', 'c')
             if label:
                 label_file = label_file.replace('A', 'C')
-
         test_data = pd.read_csv(data_file, sep='\t', header=0)[['id', 'tweet']]
         test_data.columns = ['id', 'text']
 
         if label_file:
-
             test_label = pd.read_csv(label_file, sep=',', header=None)
             test_label.columns = ['id', 'label']
             tqdm.pandas(desc="Converting labels...")
-            test_label['label'] = test_label['label'].progress_apply(label_switch_a)
+            test_label['label'] = test_label['label'].progress_apply(label_switch)
             OLID_test = pd.concat([test_label[['id']], test_data[['text']], test_label[['label']]],
                                   axis=1)
         else:
@@ -234,7 +233,7 @@ class MyDataLoader(object):
             else:
                 return sents, labels
 
-        else: # is mlt
+        else:  # is mlt
             if is_eval:
                 set = self.dev_set
                 sents = list()
@@ -262,8 +261,8 @@ class MyDataLoader(object):
                 labels += [set["label_c"].tolist()]
                 return sents, labels
 
-    def prepare_bert_data(self, sents, labels, is_eval=False):
-        if not self.mlt:
+    def prepare_bert_data(self, sents, labels, is_eval=False, is_test=False):
+        if not self.mlt or is_test:
             ids = self._encode_sent_to_ids_bert(sents)
             return self._encode_to_features(ids, labels, self.max_len)
         else:
@@ -275,9 +274,12 @@ class MyDataLoader(object):
 
     def _encode_sent_to_ids_bert(self, sents):
         ids = []
-        for sent in sents:
-            encoded_sent = self.bert_tokenizer.encode(sent, add_special_tokens=True)
-            ids.append(encoded_sent)
+        for i, sent in enumerate(sents):
+            try:
+                encoded_sent = self.bert_tokenizer.encode(sent, add_special_tokens=True)
+                ids.append(encoded_sent)
+            except:
+                import pdb;pdb.set_trace()
         return ids
 
     def _encode_to_features(self, ids, labels, maxlen):
@@ -289,6 +291,9 @@ class MyDataLoader(object):
         return inputs, masks, labels
 
     def get_dataloader(self, inputs, masks, labels_list):
-        data = TensorDataset(inputs, masks, *labels_list)
+        try:
+            data = TensorDataset(inputs, masks, *labels_list)
+        except:
+            import pdb;pdb.set_trace()
         sampler = RandomSampler(data)
         return DataLoader(data, sampler=sampler, batch_size=self.args.batch_size)

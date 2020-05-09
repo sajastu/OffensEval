@@ -142,7 +142,6 @@ def validate(args, dev_dataloaders, epoch, f1_history, trainer, writer):
         f1_score, pr, rec = evaluate_model_normal(y, y_hat)
         print(('-Overall: F1: %4.3f (Precision: %4.3f, Recall: %4.3f)\n') % (f1_score, pr, rec))
 
-
         f1_history[task].append(f1_score)
         if (trainer._maybe_save_model(f1_score, task)):
             logger.info("[BEST model] saved for task %s " % task)
@@ -176,23 +175,24 @@ def test(args):
 
     # Extracting sentences to prepare for BERT module
     test_sentences, test_labels, test_tweetids = dl.sent_label_extractor(is_test=True)
-
     # Processing text through BERT ...
-    test_inputs, test_masks, test_labels = dl.prepare_bert_data(test_sentences, test_labels)
+    test_inputs, test_masks, test_labels = dl.prepare_bert_data(test_sentences, test_labels, is_test=True)
 
     # Preparing data as input to neural network
-    test_dataloader = dl.get_dataloader(test_inputs, test_masks, test_labels)
+    test_dataloader = dl.get_dataloader(test_inputs, test_masks, [test_labels])
 
     logger.info("Loading model...")
 
     # Constructing classification model
-    model = Classifier(args)
+    model = MTLClassifier(args) if args.multi_test else Classifier(args)
     model.cuda()
     # logger.info(model)
 
     trainer = build_trainer(args, model, len(test_dataloader), is_test=True)
 
     logger.info("Start prediction...")
+
+    # task_num = 0 if args.task.lower() == 'a' else 1 if args.task.lower() == 'b' else 2
 
     y, y_hat = list(), list()
     total_test_loss = 0

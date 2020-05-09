@@ -36,10 +36,11 @@ class Trainer(object):
         self.args = args
         self.model = model
         self.device = device
-        self.loss = CELoss()
+        self.loss = CELoss(mlt=args.mlt or args.multi_test)
 
         if is_test:
             # Should load the model from checkpoint
+            # import pdb;pdb.set_trace()
             self.model.load_state_dict(torch.load(args.saved_model))
             logger.info('Loaded saved model from %s' % args.saved_model)
             self.model.eval()
@@ -65,7 +66,6 @@ class Trainer(object):
         outputs = self.model(batch_input_ids,
                              attention_mask=batch_input_masks,
                              labels=batch_labels)
-
         loss = self.loss(outputs, batch_labels)
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
         loss.backward()
@@ -83,17 +83,21 @@ class Trainer(object):
             model_output = self.model(batch_input_ids,
                                       attention_mask=batch_input_masks,
                                       labels=batch_labels)
+        if task_num is not None:
+            predicted_label_ids = self._predict(model_output[task_num])
+        else:
+            predicted_label_ids = self._predict(model_output)
 
-        predicted_label_ids = self._predict(model_output[task_num])
         label_ids = batch_labels.to('cpu').numpy()
 
-        loss = self.loss([model_output[task_num]], [batch_labels])
+        # loss = self.loss([model_output[task_num]], [batch_labels])
+        loss = self.loss([model_output], [batch_labels])
         # loss = loss.sum()
 
         return label_ids, predicted_label_ids, float(loss.cpu().data.numpy())
 
     def predict(self, batch):
-        return self.validate(batch)
+        return self.validate(batch, task_num=None)
 
     def set_train(self):
         self.model.train()

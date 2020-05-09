@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-MODEL=/disk1/sajad/trained-offns-bert/offns-mtl-pretrained/
+MODEL=/disk1/sajad/trained-offns-bert/offns-mtl-pretrained-test/
 DS_BASE_DIR=dataset/
 TASK=all
 #TASK=a

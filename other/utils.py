@@ -18,7 +18,6 @@ def cmdline_args():
     p.add_argument("--model_path", type=str, help="model_path")
     p.add_argument("--init_checkpoint", default='/disk1/sajad/pretrained-bert/pretraining_output', type=str,
                    help="model_path")
-    p.add_argument("--log_file", type=str, default='log.txt', help="model_path")
     p.add_argument("--data_dir", type=str, help="model_path")
     p.add_argument("--saved_model", type=str, help="saved_model_path")
     p.add_argument("--max_len", type=int, default=256, help="Max length of input sequence")
@@ -27,7 +26,8 @@ def cmdline_args():
     p.add_argument("--batch_size", type=int, default=5, help="Batch size")
     p.add_argument("--device_id", type=int, default=0, help="GPU device id")
     p.add_argument("--report_every", type=int, default=50, help="Report interval (steps)")
-    p.add_argument("--task", type=str, default='a', choices=['a', 'b', 'c', 'all'], help="Sub-task")
+    p.add_argument("--task", type=str, default='a', choices=['A', 'B', 'C', 'all'], help="Sub-task")
+    p.add_argument("--multi_test", action='store_true', help="Sub-task")
 
     args = p.parse_args()
     if args.task == 'all':

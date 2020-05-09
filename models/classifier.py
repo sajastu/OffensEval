@@ -13,7 +13,7 @@ class Classifier(nn.Module):
             output_hidden_states=True,
         )
         self.is_eval_mode = is_eval
-        self.linear = nn.Linear(768, 2 if args.task != 'c' else 3)
+        self.linear_1 = nn.Linear(768, 2 if args.task.lower() != 'c' else 3)
 
     def switch_state(self):
         self.is_eval_mode = not self.is_eval_mode
@@ -24,7 +24,7 @@ class Classifier(nn.Module):
                                        attention_mask=attention_mask)
 
         # Should give the logits to the the linear layer
-        model_output = self.linear(bert_outputs[1])
+        model_output = self.linear_1(bert_outputs[1])
 
         return (model_output)
 
